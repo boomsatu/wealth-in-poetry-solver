@@ -1,0 +1,23 @@
+# Build and target artifacts
+target/
+**/target/
+*.exe
+*.dll
+*.so
+*.o
+*.a
+*.pdb
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# OS and Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
