@@ -3,13 +3,8 @@ set -e
 
 # Ensure Rust environment is loaded
 source "$HOME/.cargo/env" 2>/dev/null || true
-if [ -d "venv" ]; then
-    source venv/bin/activate
-fi
 
 BINARY="./revolution_solver/target/release/revolution_solver"
-
-# Fallback if inside revolution_solver folder
 if [ ! -f "$BINARY" ] && [ -f "./target/release/revolution_solver" ]; then
     BINARY="./target/release/revolution_solver"
 fi
@@ -28,7 +23,7 @@ echo "Select execution mode:"
 echo "  1) Rust Multi-Threaded: Dispersal Blocks (auto-test 10,15,20,25,30,40,50)"
 echo "  2) Rust Multi-Threaded: Order-Preserving (gap 1 to 12)"
 echo "  3) Rust Multi-Threaded: Paragraph-Distributed"
-echo "  4) Dual RTX 5090 GPU Orchestrator (Device 0 & Device 1)"
+echo "  4) Native Dual RTX 5090 GPU Solver (Pure CUDA sm_120)"
 echo "  5) Background Execution with tmux (continues if SSH closes)"
 echo "  6) Custom command"
 echo ""
@@ -50,12 +45,15 @@ case "$CHOICE" in
         "$BINARY" --strategy paragraphs
         ;;
     4)
-        echo "Running Dual RTX 5090 GPU Orchestrator..."
-        if [ -f "revolution_solver/cuda/run_dual_5090.py" ]; then
-            python3 revolution_solver/cuda/run_dual_5090.py
-        else
-            python3 cuda/run_dual_5090.py
+        echo "Running Native Dual RTX 5090 GPU Solver (Pure CUDA)..."
+        GPU_BIN="./revolution_solver/cuda/gpu_solver"
+        if [ ! -f "$GPU_BIN" ]; then
+            echo "Compiling native CUDA binary for RTX 5090..."
+            cd revolution_solver/cuda
+            nvcc -O3 -std=c++17 gpu_solver.cu -o gpu_solver || nvcc -O3 gpu_solver.cu -o gpu_solver
+            cd ../..
         fi
+        "$GPU_BIN"
         ;;
     5)
         echo "Launching in background via tmux session 'btc-solver'..."
