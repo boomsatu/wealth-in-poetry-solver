@@ -18,7 +18,7 @@ echo "Select execution mode:"
 echo "  1) Rust Multi-Threaded: Dispersal Blocks (auto-test 10,15,20,25,30,40,50)"
 echo "  2) Rust Multi-Threaded: Order-Preserving (gap 1 to 12)"
 echo "  3) Rust Multi-Threaded: Paragraph-Distributed"
-echo "  4) Dual NVIDIA RTX 5090 GPU Solver (100 Billion Candidates, sm_120)"
+echo "  4) Dual NVIDIA RTX 5090 GPU Solver (10.74 Trillion Dispersal Sweep)"
 echo "  5) Background Execution with tmux (continues if SSH closes)"
 echo "  6) Custom command"
 echo ""
@@ -42,8 +42,10 @@ case "$CHOICE" in
     4)
         echo "Running Dual NVIDIA RTX 5090 GPU Solver..."
         cd revolution_solver/cuda
-        echo "Compiling native CUDA for Dual RTX 5090 (Blackwell sm_120)..."
+        echo "Recompiling native CUDA for Dual RTX 5090 (Blackwell sm_120)..."
+        rm -f gpu_solver
         nvcc -O3 -std=c++17 gpu_solver.cu -o gpu_solver
+        echo "Launching 10.74 Trillion Sweep on GPU 0 & GPU 1..."
         ./gpu_solver
         cd ../..
         ;;
