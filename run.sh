@@ -9,11 +9,6 @@ if [ ! -f "$BINARY" ] && [ -f "./target/release/revolution_solver" ]; then
     BINARY="./target/release/revolution_solver"
 fi
 
-if [ ! -f "$BINARY" ]; then
-    echo "Binary not found. Compiling first..."
-    cd revolution_solver && cargo build --release && cd ..
-fi
-
 echo "============================================================"
 echo "  WEALTH IN POETRY SOLVER - RUNNER"
 echo "  Target: 1K4ezpLybootYF23TM4a8Y4NyP7auysnRo"
@@ -23,13 +18,13 @@ echo "Select execution mode:"
 echo "  1) Rust Multi-Threaded: Dispersal Blocks (auto-test 10,15,20,25,30,40,50)"
 echo "  2) Rust Multi-Threaded: Order-Preserving (gap 1 to 12)"
 echo "  3) Rust Multi-Threaded: Paragraph-Distributed"
-echo "  4) Native Dual RTX 5090 GPU Solver (Pure CUDA sm_120)"
+echo "  4) Dual NVIDIA RTX 5090 GPU Solver (100 Billion Candidates, sm_120)"
 echo "  5) Background Execution with tmux (continues if SSH closes)"
 echo "  6) Custom command"
 echo ""
 
-read -p "Enter choice [1-6] (default: 1): " CHOICE
-CHOICE=${CHOICE:-1}
+read -p "Enter choice [1-6] (default: 4): " CHOICE
+CHOICE=${CHOICE:-4}
 
 case "$CHOICE" in
     1)
@@ -45,15 +40,12 @@ case "$CHOICE" in
         "$BINARY" --strategy paragraphs
         ;;
     4)
-        echo "Running Native Dual RTX 5090 GPU Solver (Pure CUDA)..."
-        GPU_BIN="./revolution_solver/cuda/gpu_solver"
-        if [ ! -f "$GPU_BIN" ]; then
-            echo "Compiling native CUDA binary for RTX 5090..."
-            cd revolution_solver/cuda
-            nvcc -O3 -std=c++17 gpu_solver.cu -o gpu_solver || nvcc -O3 gpu_solver.cu -o gpu_solver
-            cd ../..
-        fi
-        "$GPU_BIN"
+        echo "Running Dual NVIDIA RTX 5090 GPU Solver..."
+        cd revolution_solver/cuda
+        echo "Compiling native CUDA for Dual RTX 5090 (Blackwell sm_120)..."
+        nvcc -O3 -std=c++17 gpu_solver.cu -o gpu_solver
+        ./gpu_solver
+        cd ../..
         ;;
     5)
         echo "Launching in background via tmux session 'btc-solver'..."
@@ -63,7 +55,7 @@ case "$CHOICE" in
         echo "To view logs: tail -f solver.log"
         ;;
     6)
-        read -p "Enter custom arguments (e.g., --strategy blocks --block-size 15 --passphrase trithemius): " CUSTOM_ARGS
+        read -p "Enter custom arguments: " CUSTOM_ARGS
         "$BINARY" $CUSTOM_ARGS
         ;;
     *)
