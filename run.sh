@@ -47,8 +47,9 @@ case "$CHOICE" in
         echo "  1) Rust Native Multi-Threaded Engine (Verified BIP-39/BIP-44 Crypto)"
         echo "  2) Dual NVIDIA RTX 5090 Native CUDA Solver (sm_120)"
         echo "  3) Background tmux session (Rust Dispersal Sweep)"
-        read -p "Choose runner [1-3] (default: 1): " ENGINE_CHOICE
-        ENGINE_CHOICE=${ENGINE_CHOICE:-1}
+        echo "  4) Background tmux session (Dual GPU CUDA Solver)"
+        read -p "Choose runner [1-4] (default: 2): " ENGINE_CHOICE
+        ENGINE_CHOICE=${ENGINE_CHOICE:-2}
 
         case "$ENGINE_CHOICE" in
             1)
@@ -77,9 +78,25 @@ case "$CHOICE" in
                 tmux new-session -d -s btc-dispersal "$BINARY --strategy dispersal | tee dispersal_solver.log"
                 echo "Solver running in background! Use: tmux attach -t btc-dispersal"
                 ;;
+            4)
+                echo "Compiling CUDA solver..."
+                cd revolution_solver/cuda
+                rm -f gpu_solver
+                nvcc -O3 -std=c++17 -arch=native gpu_solver.cu -o gpu_solver \
+                     -lssl -lcrypto -lpthread 2>/dev/null \
+                  || nvcc -O3 -std=c++17 gpu_solver.cu -o gpu_solver \
+                          -lssl -lcrypto -lpthread
+                echo "Launching CUDA solver in background via tmux session 'btc-gpu'..."
+                tmux new-session -d -s btc-gpu "./gpu_solver | tee ../../gpu_solver.log"
+                cd ../..
+                echo "Solver running in background! Use: tmux attach -t btc-gpu"
+                echo "To view logs: tail -f gpu_solver.log"
+                ;;
             *)
-                echo "Invalid engine choice. Running Rust default..."
-                "$BINARY" --strategy dispersal
+                echo "Invalid engine choice. Running CUDA solver..."
+                cd revolution_solver/cuda
+                ./gpu_solver
+                cd ../..
                 ;;
         esac
         ;;
