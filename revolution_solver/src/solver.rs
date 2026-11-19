@@ -365,13 +365,13 @@ fn run_dispersal12_strategy(
     valid_checksum_count: &Arc<AtomicU64>,
     pb: &ProgressBar,
 ) {
-    println!("Strategy: 12-Story Dispersal Blocks Sweep (Exhaustive 10.74T Search)");
+    println!("Strategy: 12-Story Dispersal Blocks Sweep (Exhaustive 213.69B Search)");
     println!("Block sizes: [10, 7, 7, 13, 8, 8, 4, 10, 12, 7, 12, 13]");
     let mut total_combos: u64 = 1;
     for b in &DISPERSAL_12_BLOCKS {
         total_combos *= b.len() as u64;
     }
-    println!("Total Combinations: {} (~10.74 Trillion)", total_combos);
+    println!("Total Combinations: {} (~213.69 Billion)", total_combos);
 
     // Parallelize across the first 2 blocks (10 * 7 = 70 tasks)
     let b0 = DISPERSAL_12_BLOCKS[0];

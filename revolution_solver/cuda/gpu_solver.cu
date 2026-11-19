@@ -54,6 +54,7 @@ static const uint8_t TARGET_H160[20] = {
     0x82,0xfc,0xd8,0x8d,0x69,0xb5,0xf1,0xa3,
     0xec,0x6e,0x35,0x5a
 };
+static const uint64_t TOTAL_COMBOS = 213689548800ULL; /* 213.69 Billion (10*7*7*13*8*8*4*10*12*7*12*13) */
 
 /* ============================================================
  * 12-Block Dispersal data  (GPU constant memory)
@@ -299,30 +300,16 @@ static bool verify_one(const uint16_t* indices, char* phrase_out, char* path_out
         return false;
     };
 
+    // 1. Direct root key (m)
     if (check(M.prv,"m")) return true;
 
+    // 2. Standard BIP-44: m/44'/0'/0'/0/0 (and test index 1, 2)
     XKey a,b,c2,ext,leaf;
-    // m/44'/0'/0'/0/i
-    if (child(M,44,true,a)&&child(a,0,true,b)&&child(b,0,true,c2)&&child(c2,0,false,ext))
-        for (uint32_t i=0;i<10;i++){
-            if (!child(ext,i,false,leaf)) continue;
-            char p[32]; sprintf(p,"m/44'/0'/0'/0/%u",i);
-            if (check(leaf.prv,p)) return true;
-        }
-    // m/44'/0'/0'/1/i (change)
-    if (child(M,44,true,a)&&child(a,0,true,b)&&child(b,0,true,c2)&&child(c2,1,false,ext))
-        for (uint32_t i=0;i<5;i++){
-            if (!child(ext,i,false,leaf)) continue;
-            char p[32]; sprintf(p,"m/44'/0'/0'/1/%u",i);
-            if (check(leaf.prv,p)) return true;
-        }
-    // m/0/i (Electrum)
-    if (child(M,0,false,a))
-        for (uint32_t i=0;i<5;i++){
-            if (!child(a,i,false,leaf)) continue;
-            char p[16]; sprintf(p,"m/0/%u",i);
-            if (check(leaf.prv,p)) return true;
-        }
+    if (child(M,44,true,a) && child(a,0,true,b) && child(b,0,true,c2) && child(c2,0,false,ext)){
+        if (child(ext,0,false,leaf) && check(leaf.prv,"m/44'/0'/0'/0/0")) return true;
+        if (child(ext,1,false,leaf) && check(leaf.prv,"m/44'/0'/0'/0/1")) return true;
+        if (child(ext,2,false,leaf) && check(leaf.prv,"m/44'/0'/0'/0/2")) return true;
+    }
     return false;
 }
 
@@ -341,7 +328,7 @@ struct Cand12 {
 
 /* Bounded verification queue — prevents memory blowup */
 struct VerifyQueue {
-    static const size_t MAX_Q = 2000000; /* 2M slots max in queue */
+    static const size_t MAX_Q = 500000; /* 500K slots max in queue */
     std::queue<Cand12> q_;
     std::mutex mtx_;
     std::condition_variable cv_not_empty_, cv_not_full_;
@@ -481,26 +468,19 @@ static void gpu_worker(int dev, uint64_t base, uint64_t total,
         if (std::chrono::duration<double>(now-t_last_print).count() >= 2.0){
             t_last_print = now;
             double el    =std::chrono::duration<double>(now-t0).count();
-            double el_tot=std::chrono::duration<double>(now-t_global_start).count();
 
             double gpu_spd   = (el>0) ? (double)done/el/1e9 : 0.0;
             double pct_gpu   = (double)done/(double)total*100.0;
-            double pct_total = (double)G_generated.load()/10740655718400.0*100.0;
-
-            uint64_t rem_total = 10740655718400ULL - G_generated.load();
-            double comb_spd  = (el_tot>0) ? (double)G_generated.load()/el_tot/1e9 : 0.0;
-            double eta_s     = (comb_spd>0) ? (double)rem_total/(comb_spd*1e9) : 0.0;
-            int eh=(int)(eta_s/3600), em=(int)(eta_s/60)%60, es2=(int)eta_s%60;
+            double pct_total = (double)G_generated.load()/(double)TOTAL_COMBOS*100.0;
 
             printf("[GPU %d] %6.2f%% (this GPU) | Overall: %5.2f%% | "
                    "Speed: %6.2f G/s | CS-pass: %llu | "
-                   "Queue: %zu | Verified: %llu | ETA: %02d:%02d:%02d\n",
+                   "Queue: %zu | Verified: %llu\n",
                    dev, pct_gpu, pct_total,
                    gpu_spd,
                    (unsigned long long)G_cs_pass.load(),
                    G_queue.size(),
-                   (unsigned long long)G_verified.load(),
-                   eh, em, es2);
+                   (unsigned long long)G_verified.load());
             fflush(stdout);
         }
     }
@@ -516,8 +496,8 @@ int main(int argc, char** argv){
     printf("============================================================\n");
     printf("  DUAL RTX 5090  --  FULL VERIFICATION DISPERSAL SOLVER\n");
     printf("  Target  : %s\n", TARGET_ADDR);
-    printf("  Pipeline: GPU SHA-256 checksum -> CPU thread-pool PBKDF2+BIP44\n");
-    printf("  Fix     : Double-buffer + all CPU cores used (no GPU idle wait)\n");
+    printf("  Pipeline: GPU SHA-256 filter -> CPU thread-pool BIP-44 verify\n");
+    printf("  Target  : m/44'/0'/0'/0/0 (Standard BIP-44 Receiving Address)\n");
     printf("============================================================\n");
 
     if (!load_wordlist()){
@@ -532,11 +512,11 @@ int main(int argc, char** argv){
     if (ncpu<1) ncpu=4;
     printf("CPU cores for PBKDF2 verification: %d\n", ncpu);
 
-    const uint64_t TOTAL=10740655718400ULL;
+    const uint64_t TOTAL = TOTAL_COMBOS;
     int gpus=(ndev>=2)?2:1;
     uint64_t per=TOTAL/gpus;
 
-    printf("Total combinations : %.2f Trillion\n", TOTAL/1e12);
+    printf("Total combinations : %.2f Billion (213,689,548,800)\n", (double)TOTAL/1e9);
     printf("GPUs               : %d  |  Batch per kernel: %.0fK\n",
            gpus, (double)BATCH_SIZE/1000.0);
     printf("MAX_VALID/batch    : %d  (overflow-safe for %.0fK * 7%%)\n\n",
@@ -555,28 +535,44 @@ int main(int argc, char** argv){
     for (int i=0;i<gpus;i++)
         gpu_threads.emplace_back(gpu_worker, i, (uint64_t)i*per, per, t_start);
 
-    /* Combined summary every 60 seconds */
+    /* Combined summary every 15 seconds */
     std::thread summary([&](){
+        uint64_t last_ver = 0;
+        auto last_t = t_start;
         while (!G_found.load()){
-            std::this_thread::sleep_for(std::chrono::seconds(60));
+            std::this_thread::sleep_for(std::chrono::seconds(15));
             if (G_found.load()) break;
             auto now=std::chrono::high_resolution_clock::now();
             double el=std::chrono::duration<double>(now-t_start).count();
+            double interval=std::chrono::duration<double>(now-last_t).count();
+            last_t = now;
+
             uint64_t gen=G_generated.load();
-            double pct=(double)gen/10740655718400.0*100.0;
-            double spd=(double)gen/el/1e9;
-            uint64_t rem=10740655718400ULL-gen;
-            double eta_s=(spd>0)?(double)rem/(spd*1e9):0;
+            uint64_t ver=G_verified.load();
+            uint64_t csp=G_cs_pass.load();
+
+            double ver_rate = (interval > 0) ? (double)(ver - last_ver) / interval : 0.0;
+            last_ver = ver;
+
+            double pct=(double)gen/(double)TOTAL*100.0;
+            double spd=(el>0)?(double)gen/el/1e9:0.0;
+
+            // Remaining checksum-pass candidates to verify (expected ~13.35 Billion total)
+            uint64_t expected_total_cs = (uint64_t)(TOTAL * 0.0625);
+            uint64_t rem_ver = (expected_total_cs > ver) ? (expected_total_cs - ver) : 0;
+            double eta_s = (ver_rate > 0) ? (double)rem_ver / ver_rate : 0.0;
             int eh=(int)(eta_s/3600),em=(int)(eta_s/60)%60,es=(int)eta_s%60;
-            printf("\n[SUMMARY] Overall: %.3f%% | %.3fT/10.74T | "
-                   "Speed: %.2f G/s | CS-pass: %llu | "
-                   "Verified: %llu | Queue: %zu | "
+
+            printf("\n[SUMMARY] Overall: %.2f%% | %.2fB / %.2fB | "
+                   "GPU Filter: %.2f G/s | CPU Verify: %.0f/s | "
+                   "CS-pass: %llu | Verified: %llu | Queue: %zu | "
                    "Elapsed: %.0fs | ETA: %02d:%02d:%02d\n\n",
-                   pct,(double)gen/1e12,spd,
-                   (unsigned long long)G_cs_pass.load(),
-                   (unsigned long long)G_verified.load(),
+                   pct, (double)gen/1e9, (double)TOTAL/1e9,
+                   spd, ver_rate,
+                   (unsigned long long)csp,
+                   (unsigned long long)ver,
                    G_queue.size(),
-                   el, eh,em,es);
+                   el, eh, em, es);
             fflush(stdout);
         }
     });
@@ -596,7 +592,7 @@ int main(int argc, char** argv){
 
     printf("\n============================================================\n");
     printf("  SWEEP FINISHED\n");
-    printf("  Generated      : %.3f Trillion\n",G_generated.load()/1e12);
+    printf("  Generated      : %.3f Billion\n", (double)G_generated.load()/1e9);
     printf("  CS-pass        : %llu (%.3f%%)\n",
            (unsigned long long)G_cs_pass.load(),
            (G_generated.load()>0)?(double)G_cs_pass.load()/(double)G_generated.load()*100.0:0.0);
