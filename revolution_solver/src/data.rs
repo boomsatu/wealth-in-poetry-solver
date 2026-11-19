@@ -36,6 +36,7 @@ pub fn get_revolution_bip39_occurrences() -> Vec<(usize, u16, String)> {
     occ
 }
 
+#[allow(dead_code)]
 pub fn get_revolution_unique_bip39() -> Vec<(u16, String)> {
     let occ = get_revolution_bip39_occurrences();
     let mut unique = Vec::new();
@@ -47,3 +48,31 @@ pub fn get_revolution_unique_bip39() -> Vec<(u16, String)> {
     }
     unique
 }
+
+/// 12 Dispersal Blocks from the Revolution story (chronological 12-section partition)
+pub const DISPERSAL_12_BLOCKS: [&[u16]; 12] = [
+    // Block 0: into(935), large(1004), family(646), early(545), during(532), time(1785), decade(439), that(1754), over(1261), find(663)
+    &[935, 1004, 646, 545, 532, 1785, 439, 1754, 1261, 663],
+    // Block 1: among(58), shift(1572), civil(331), world(2038), what(1999), time(1785), six(1612)
+    &[58, 1572, 331, 2038, 1999, 1785, 1612],
+    // Block 2: mother(1162), father(650), frequent(715), people(1302), during(532), this(1770), time(1785)
+    &[1162, 650, 715, 1302, 532, 1770, 1785],
+    // Block 3: gold(786), exchange(613), large(1004), main(1076), room(1500), where(2012), hidden(856), trap(1832), door(517), father(650), wealth(2004), gold(786), silver(1600)
+    &[786, 613, 1004, 1076, 1500, 2012, 856, 1832, 517, 650, 2004, 786, 1600],
+    // Block 4: hidden(856), under(1891), time(1785), gold(786), purchase(1406), fine(664), civil(331), boat(201)
+    &[856, 1891, 1785, 786, 1406, 664, 331, 201],
+    // Block 5: cost(396), gold(786), time(1785), between(160), two(1863), apart(67), second(1548), civil(331)
+    &[396, 786, 1785, 160, 1863, 67, 1548, 331],
+    // Block 6: party(1284), cause(287), wealth(2004), upper(1898)
+    &[1284, 287, 2004, 1898],
+    // Block 7: people(1302), once(1234), over(1261), like(1032), future(735), when(2010), assume(102), own(1265), that(1754), assume(102)
+    &[1302, 1234, 1261, 1032, 735, 2010, 102, 1265, 1754, 102],
+    // Block 8: own(1265), father(650), gold(786), hidden(856), mother(1162), they(1762), off(1222), neutral(1195), zone(2046), time(1785), still(1698), gold(786)
+    &[1265, 650, 786, 856, 1162, 1762, 1222, 1195, 2046, 1785, 1698, 786],
+    // Block 9: between(160), into(935), network(1194), have(829), used(1904), since(1605), once(1234)
+    &[160, 935, 1194, 829, 1904, 1605, 1234],
+    // Block 10: bleak(191), gold(786), cousin(401), abandon(0), home(863), family(646), country(400), since(1605), life(1028), twice(1861), once(1234), again(35)
+    &[191, 786, 401, 0, 863, 646, 400, 1605, 1028, 1861, 1234, 35],
+    // Block 11: until(1899), home(863), never(1193), mother(1162), again(35), present(1374), day(431), this(1770), story(1710), still(1698), today(1787), often(1221), heavy(843)
+    &[1899, 863, 1193, 1162, 35, 1374, 431, 1770, 1710, 1698, 1787, 1221, 843],
+];

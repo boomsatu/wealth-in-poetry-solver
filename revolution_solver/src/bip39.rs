@@ -27,6 +27,7 @@ pub fn word_index(word: &str) -> Option<u16> {
     get_word_to_index().get(word).copied()
 }
 
+#[allow(dead_code)]
 pub fn index_to_word(idx: u16) -> &'static str {
     get_words()[idx as usize]
 }

@@ -1,6 +1,6 @@
 use crate::bip39::{fast_verify_checksum, indices_to_phrase, mnemonic_to_seed};
 use crate::crypto::check_seed_matches_target;
-use crate::data::{get_revolution_bip39_occurrences, get_revolution_words, REVOLUTION_PARAGRAPHS};
+use crate::data::{get_revolution_bip39_occurrences, get_revolution_words, DISPERSAL_12_BLOCKS, REVOLUTION_PARAGRAPHS};
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -12,6 +12,7 @@ pub enum Strategy {
     Blocks,
     OrderPreserving,
     Paragraphs,
+    Dispersal12,
 }
 
 pub struct SolverConfig {
@@ -44,6 +45,9 @@ pub fn run_cpu_solver(config: SolverConfig) {
         }
         Strategy::Paragraphs => {
             run_paragraphs_strategy(&config, &found, &tested_count, &valid_checksum_count, &pb);
+        }
+        Strategy::Dispersal12 => {
+            run_dispersal12_strategy(&config, &found, &tested_count, &valid_checksum_count, &pb);
         }
     }
 
@@ -352,4 +356,89 @@ fn run_paragraphs_strategy(
             pb,
         );
     });
+}
+
+fn run_dispersal12_strategy(
+    config: &SolverConfig,
+    found: &Arc<AtomicBool>,
+    tested_count: &Arc<AtomicU64>,
+    valid_checksum_count: &Arc<AtomicU64>,
+    pb: &ProgressBar,
+) {
+    println!("Strategy: 12-Story Dispersal Blocks Sweep (Exhaustive 10.74T Search)");
+    println!("Block sizes: [10, 7, 7, 13, 8, 8, 4, 10, 12, 7, 12, 13]");
+    let mut total_combos: u64 = 1;
+    for b in &DISPERSAL_12_BLOCKS {
+        total_combos *= b.len() as u64;
+    }
+    println!("Total Combinations: {} (~10.74 Trillion)", total_combos);
+
+    // Parallelize across the first 2 blocks (10 * 7 = 70 tasks)
+    let b0 = DISPERSAL_12_BLOCKS[0];
+    let b1 = DISPERSAL_12_BLOCKS[1];
+    let tasks: Vec<(u16, u16)> = b0
+        .iter()
+        .flat_map(|&w0| b1.iter().map(move |&w1| (w0, w1)))
+        .collect();
+
+    tasks.into_par_iter().for_each(|(w0, w1)| {
+        if found.load(Ordering::Relaxed) {
+            return;
+        }
+        let mut candidate = [0u16; 12];
+        candidate[0] = w0;
+        candidate[1] = w1;
+
+        dfs_dispersal12(
+            2,
+            &mut candidate,
+            &config.passphrase,
+            found,
+            tested_count,
+            valid_checksum_count,
+            pb,
+        );
+    });
+}
+
+fn dfs_dispersal12(
+    depth: usize,
+    candidate: &mut [u16; 12],
+    passphrase: &str,
+    found: &AtomicBool,
+    tested_count: &AtomicU64,
+    valid_checksum_count: &AtomicU64,
+    pb: &ProgressBar,
+) {
+    if found.load(Ordering::Relaxed) {
+        return;
+    }
+
+    if depth == 12 {
+        check_candidate(
+            candidate,
+            passphrase,
+            found,
+            tested_count,
+            valid_checksum_count,
+            pb,
+        );
+        return;
+    }
+
+    for &val in DISPERSAL_12_BLOCKS[depth] {
+        candidate[depth] = val;
+        dfs_dispersal12(
+            depth + 1,
+            candidate,
+            passphrase,
+            found,
+            tested_count,
+            valid_checksum_count,
+            pb,
+        );
+        if found.load(Ordering::Relaxed) {
+            return;
+        }
+    }
 }

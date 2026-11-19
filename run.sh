@@ -40,14 +40,45 @@ case "$CHOICE" in
         "$BINARY" --strategy paragraphs
         ;;
     4)
-        echo "Running Dual NVIDIA RTX 5090 GPU Solver..."
-        cd revolution_solver/cuda
-        echo "Recompiling native CUDA for Dual RTX 5090 (Blackwell sm_120)..."
-        rm -f gpu_solver
-        nvcc -O3 -std=c++17 gpu_solver.cu -o gpu_solver
-        echo "Launching 10.74 Trillion Sweep on GPU 0 & GPU 1..."
-        ./gpu_solver
-        cd ../..
+        echo "============================================================"
+        echo "  MODE 4: HIGH-PERFORMANCE DISPERSAL SWEEP"
+        echo "============================================================"
+        echo "Select engine:"
+        echo "  1) Rust Native Multi-Threaded Engine (Verified BIP-39/BIP-44 Crypto)"
+        echo "  2) Dual NVIDIA RTX 5090 Native CUDA Solver (sm_120)"
+        echo "  3) Background tmux session (Rust Dispersal Sweep)"
+        read -p "Choose runner [1-3] (default: 1): " ENGINE_CHOICE
+        ENGINE_CHOICE=${ENGINE_CHOICE:-1}
+
+        case "$ENGINE_CHOICE" in
+            1)
+                echo "Ensuring Rust release binary is built..."
+                if [ ! -f "$BINARY" ]; then
+                    (cd revolution_solver && cargo build --release)
+                fi
+                echo "Launching Rust Multi-Threaded Dispersal Sweep..."
+                "$BINARY" --strategy dispersal
+                ;;
+            2)
+                echo "Running Dual NVIDIA RTX 5090 GPU Solver..."
+                cd revolution_solver/cuda
+                echo "Compiling native CUDA for Dual RTX 5090 (sm_120)..."
+                rm -f gpu_solver
+                nvcc -O3 -std=c++17 -arch=native gpu_solver.cu -o gpu_solver 2>/dev/null || nvcc -O3 -std=c++17 gpu_solver.cu -o gpu_solver
+                echo "Launching Sweep on GPU 0 & GPU 1..."
+                ./gpu_solver
+                cd ../..
+                ;;
+            3)
+                echo "Launching in background via tmux session 'btc-dispersal'..."
+                tmux new-session -d -s btc-dispersal "$BINARY --strategy dispersal | tee dispersal_solver.log"
+                echo "Solver running in background! Use: tmux attach -t btc-dispersal"
+                ;;
+            *)
+                echo "Invalid engine choice. Running Rust default..."
+                "$BINARY" --strategy dispersal
+                ;;
+        esac
         ;;
     5)
         echo "Launching in background via tmux session 'btc-solver'..."

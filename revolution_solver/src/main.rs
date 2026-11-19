@@ -9,8 +9,8 @@ use solver::{run_cpu_solver, SolverConfig, Strategy};
 #[derive(Parser, Debug)]
 #[command(author, version, about = "High-Performance Revolution Solver for Wealth in Poetry BTC Puzzle")]
 struct Args {
-    /// Strategy to use: blocks, order-preserving, paragraphs
-    #[arg(short, long, default_value = "blocks")]
+    /// Strategy to use: blocks, order-preserving, paragraphs, dispersal
+    #[arg(short, long, default_value = "dispersal")]
     strategy: String,
 
     /// Block size for blocks strategy (0 to auto-test sizes 10, 15, 20, 25, 30, 40, 50)
@@ -48,8 +48,9 @@ fn main() {
         "blocks" | "block" => Strategy::Blocks,
         "order" | "order-preserving" | "subseq" => Strategy::OrderPreserving,
         "para" | "paragraphs" => Strategy::Paragraphs,
+        "dispersal" | "dispersal12" | "sweep" => Strategy::Dispersal12,
         _ => {
-            eprintln!("Unknown strategy: {}. Available: blocks, order-preserving, paragraphs", args.strategy);
+            eprintln!("Unknown strategy: {}. Available: blocks, order-preserving, paragraphs, dispersal", args.strategy);
             std::process::exit(1);
         }
     };
