@@ -60,12 +60,15 @@ case "$CHOICE" in
                 "$BINARY" --strategy dispersal
                 ;;
             2)
-                echo "Running Dual NVIDIA RTX 5090 GPU Solver..."
+                echo "Running Dual NVIDIA RTX 5090 GPU Solver (Full Verification)..."
                 cd revolution_solver/cuda
-                echo "Compiling native CUDA for Dual RTX 5090 (sm_120)..."
+                echo "Compiling CUDA solver with OpenSSL crypto (sm_120 / native)..."
                 rm -f gpu_solver
-                nvcc -O3 -std=c++17 -arch=native gpu_solver.cu -o gpu_solver 2>/dev/null || nvcc -O3 -std=c++17 gpu_solver.cu -o gpu_solver
-                echo "Launching Sweep on GPU 0 & GPU 1..."
+                nvcc -O3 -std=c++17 -arch=native gpu_solver.cu -o gpu_solver \
+                     -lssl -lcrypto -lpthread 2>/dev/null \
+                  || nvcc -O3 -std=c++17 gpu_solver.cu -o gpu_solver \
+                          -lssl -lcrypto -lpthread
+                echo "Launching Full-Pipeline Sweep on GPU 0 & GPU 1..."
                 ./gpu_solver
                 cd ../..
                 ;;
