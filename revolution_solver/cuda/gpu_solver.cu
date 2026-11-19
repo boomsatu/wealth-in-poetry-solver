@@ -96,7 +96,7 @@ __device__ __constant__ uint32_t K256[64] = {
     0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
     0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,
     0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-    0x19a4c116,0x1e376c085,0x2748774c,0x34b0bcb5,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,
     0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
     0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,
     0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
@@ -376,6 +376,8 @@ static void gpu_worker(int dev, uint64_t base, uint64_t total){
     printf("[GPU %d] %s  SMs=%d  VRAM=%.1fGB\n",
            dev,p.name,p.multiProcessorCount,
            (double)p.totalGlobalMem/(1ULL<<30));
+    printf("[GPU %d] Assigned range: %.3fT - %.3fT  (%.3f Trillion total)\n",
+           dev, (double)base/1e12, (double)(base+total)/1e12, (double)total/1e12);
     fflush(stdout);
 
     /* GPU buffers */
@@ -438,14 +440,45 @@ static void gpu_worker(int dev, uint64_t base, uint64_t total){
             }
         }
 
-        /* progress */
+        /* ---- progress report ---- */
         auto now=std::chrono::high_resolution_clock::now();
         double el=std::chrono::duration<double>(now-t0).count();
-        uint64_t gen=G_generated.load();
-        printf("[GPU %d] %.3fT/10.74T  cs_pass=%llu  %.2f G/s\n",
-               dev,(double)(base+done)/1e12,
+
+        /* per-GPU speed (candidates/s this GPU only) */
+        double gpu_speed = (double)done / el / 1e9;   /* G/s */
+
+        /* combined throughput across all GPUs */
+        double comb_speed = (double)G_generated.load() / el / 1e9;
+
+        /* progress % for this GPU's slice */
+        double pct = (total > 0) ? (double)done / (double)total * 100.0 : 0.0;
+
+        /* overall progress % across all GPUs */
+        double pct_total = (double)G_generated.load() / 10740655718400.0 * 100.0;
+
+        /* ETA in seconds (based on combined speed for remaining total work) */
+        uint64_t remaining = 10740655718400ULL - G_generated.load();
+        double eta_s = (comb_speed > 0.0)
+                       ? (double)remaining / (comb_speed * 1e9)
+                       : 0.0;
+
+        /* format ETA as hh:mm:ss */
+        int eta_h  = (int)(eta_s / 3600);
+        int eta_m  = (int)(eta_s / 60) % 60;
+        int eta_s2 = (int)eta_s % 60;
+
+        printf("[GPU %d] Progress: %.2f%%  (this GPU: %.3fT/5.37T)  "
+               "Overall: %.2f%%  "
+               "Speed: %.2f G/s  "
+               "CS-pass: %llu  "
+               "ETA: %02d:%02d:%02d\n",
+               dev,
+               pct,
+               (double)done / 1e12,
+               pct_total,
+               gpu_speed,
                (unsigned long long)G_cs_pass.load(),
-               (double)(gen/el)/1e9);
+               eta_h, eta_m, eta_s2);
         fflush(stdout);
     }
 
@@ -486,7 +519,35 @@ int main(int argc, char** argv){
     std::vector<std::thread> threads;
     for (int i=0;i<gpus;i++)
         threads.emplace_back(gpu_worker, i, (uint64_t)i*per, per);
+
+    /* ---- combined summary thread (prints every 30s) ---- */
+    std::thread summary_thread([&](){
+        const uint64_t TOTAL_CMB=10740655718400ULL;
+        while (!G_found.load()){
+            std::this_thread::sleep_for(std::chrono::seconds(30));
+            if (G_found.load()) break;
+            auto now=std::chrono::high_resolution_clock::now();
+            double el=std::chrono::duration<double>(now-t_start).count();
+            uint64_t gen=G_generated.load();
+            uint64_t csp=G_cs_pass.load();
+            double pct=(double)gen/(double)TOTAL_CMB*100.0;
+            double speed=(double)gen/el/1e9;
+            uint64_t rem=TOTAL_CMB-gen;
+            double eta_s=(speed>0)?(double)rem/(speed*1e9):0;
+            int eh=(int)(eta_s/3600), em=(int)(eta_s/60)%60, es=(int)eta_s%60;
+            printf("\n[COMBINED] Overall: %.2f%% | %.3fT / 10.74T | "
+                   "Speed: %.2f G/s | CS-pass: %llu | "
+                   "Elapsed: %.0fs | ETA: %02d:%02d:%02d\n\n",
+                   pct, (double)gen/1e12, speed,
+                   (unsigned long long)csp,
+                   el, eh, em, es);
+            fflush(stdout);
+        }
+    });
+
     for (auto& t:threads) t.join();
+    G_found.store(true);   /* signal summary thread to stop */
+    summary_thread.join();
 
     auto t_end=std::chrono::high_resolution_clock::now();
     double elapsed=std::chrono::duration<double>(t_end-t_start).count();
