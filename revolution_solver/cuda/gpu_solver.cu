@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -358,14 +359,18 @@ struct VerifyQueue {
         cv_not_empty_.notify_all();
     }
 
-    /* Pop one candidate; returns false when queue empty + done */
-    bool pop(Cand12& out){
+    /* Pop a batch of up to max_items candidates (reduces lock contention by 256x) */
+    size_t pop_batch(Cand12* out, size_t max_items){
         std::unique_lock<std::mutex> lk(mtx_);
         cv_not_empty_.wait(lk,[&]{ return !q_.empty() || done_; });
-        if (q_.empty()) return false;
-        out=q_.front(); q_.pop();
-        cv_not_full_.notify_one();
-        return true;
+        if (q_.empty()) return 0;
+        size_t count=0;
+        while (!q_.empty() && count<max_items){
+            out[count++] = q_.front();
+            q_.pop();
+        }
+        cv_not_full_.notify_all();
+        return count;
     }
 
     void set_done(){
@@ -381,24 +386,28 @@ struct VerifyQueue {
     }
 } G_queue;
 
-/* CPU verifier thread: pulls from queue, runs PBKDF2+BIP44 */
+/* CPU verifier thread: pulls batches from queue, runs PBKDF2+BIP44 */
 static void cpu_verifier_thread(){
-    Cand12 cand;
-    while (G_queue.pop(cand)){
-        if (G_found.load()) { G_verified.fetch_add(1); continue; }
-        char phrase[256]="", path[64]="";
-        if (verify_one(cand.w, phrase, path)){
-            G_found.store(true);
-            printf("\n");
-            printf("============================================================\n");
-            printf("  TARGET FOUND!\n");
-            printf("  Mnemonic : %s\n", phrase);
-            printf("  Path     : %s\n", path);
-            printf("  Address  : %s\n", TARGET_ADDR);
-            printf("============================================================\n");
-            fflush(stdout);
+    Cand12 batch[256];
+    while (true){
+        size_t n = G_queue.pop_batch(batch, 256);
+        if (n == 0) break;
+        for (size_t i = 0; i < n; i++){
+            if (G_found.load()) { G_verified.fetch_add(1); continue; }
+            char phrase[256]="", path[64]="";
+            if (verify_one(batch[i].w, phrase, path)){
+                G_found.store(true);
+                printf("\n");
+                printf("============================================================\n");
+                printf("  TARGET FOUND!\n");
+                printf("  Mnemonic : %s\n", phrase);
+                printf("  Path     : %s\n", path);
+                printf("  Address  : %s\n", TARGET_ADDR);
+                printf("============================================================\n");
+                fflush(stdout);
+            }
+            G_verified.fetch_add(1);
         }
-        G_verified.fetch_add(1);
     }
 }
 
@@ -437,7 +446,7 @@ static void gpu_worker(int dev, uint64_t base, uint64_t total,
     auto t_last_print=t0;
 
     while (done<total && !G_found.load()){
-        uint64_t batch=std::min(BATCH_SIZE, total-done);
+        uint64_t batch = ((total - done) < (uint64_t)BATCH_SIZE) ? (total - done) : (uint64_t)BATCH_SIZE;
 
         /* sync stop flag */
         uint32_t sf=G_found.load()?1u:0u;
